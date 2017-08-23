@@ -34,13 +34,13 @@ from cmstestsuite.Test import Test, CheckOverallScore, CheckCompilationFail, \
     CheckTimeout, CheckTimeoutWall, CheckNonzeroReturn
 
 
-LANG_CPP = "C++11 / g++"
-LANG_C = "C11 / gcc"
+LANG_CPP = "C++ / g++"
+LANG_C = "C / gcc"
 LANG_HS = "Haskell / ghc"
 LANG_JAVA = "Java / JDK"
 LANG_PASCAL = "Pascal / fpc"
 LANG_PHP = "PHP"
-LANG_PYTHON = "Python 2 / CPython"
+LANG_PYTHON = "Python"
 LANG_RUST = "Rust"
 ALL_LANGUAGES = (
     LANG_CPP, LANG_C, LANG_HS, LANG_JAVA, LANG_PASCAL, LANG_PHP, LANG_PYTHON,

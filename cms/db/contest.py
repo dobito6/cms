@@ -83,7 +83,7 @@ class Contest(Base):
     languages = Column(
         RepeatedUnicode(),
         nullable=False,
-        default=["C11 / gcc", "C++11 / g++", "Pascal / fpc"])
+        default=["C / gcc", "C++ / g++", "Pascal / fpc"])
 
     # Whether contestants allowed to download their submissions.
     submissions_download_allowed = Column(
