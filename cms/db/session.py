@@ -98,7 +98,6 @@ def custom_psycopg2_connection(**kwargs):
     database_url.query.update(kwargs)
     if database_url.port is None:
         database_url.port = 5432
-        logger.warning("Using default port 5432 for Postgres DB")
 
     return psycopg2.connect(
         host=database_url.host,
