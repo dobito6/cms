@@ -48,7 +48,7 @@ class CodenameConstraint(CheckConstraint):
     def __init__(self, column_name):
         column = ColumnClause(column_name)
         super(CodenameConstraint, self).__init__(
-            column.op("~")(literal_column("'^[A-Za-z0-9_-]+$'")))
+            column.op("~")(literal_column("'^[A-Za-z0-9_.-]+$'")))
 
 
 class FilenameConstraint(CheckConstraint):
