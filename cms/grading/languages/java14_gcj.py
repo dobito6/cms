@@ -41,7 +41,7 @@ class Java14Gcj(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "Java 1.4 / gcj"
+        return "Java / gcj"
 
     @property
     def source_extensions(self):

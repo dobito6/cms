@@ -38,7 +38,7 @@ class C11Gcc(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "C11 / gcc"
+        return "C / gcc"
 
     @property
     def source_extensions(self):

@@ -38,7 +38,7 @@ class Cpp11Gpp(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "C++11 / g++"
+        return "C++ / g++"
 
     @property
     def source_extensions(self):
