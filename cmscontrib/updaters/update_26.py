@@ -85,7 +85,7 @@ IP_ADDRESSES = [
 def encode_codename(s, extra=""):
     encoded_s = ""
     for char in s.encode('utf-8'):
-        if char not in string.ascii_letters + string.digits + "_-" + extra:
+        if char not in string.ascii_letters + string.digits + "_.-" + extra:
             encoded_s += "__%x" % ord(char)
         else:
             encoded_s += unicode(char)
