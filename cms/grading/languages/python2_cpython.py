@@ -41,7 +41,7 @@ class Python2CPython(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "Python"
+        return "Python 2"
 
     @property
     def source_extensions(self):
