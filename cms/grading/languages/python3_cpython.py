@@ -41,7 +41,7 @@ class Python3CPython(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "Python 3 / CPython"
+        return "Python 3"
 
     @property
     def source_extensions(self):
@@ -53,7 +53,7 @@ class Python3CPython(CompiledLanguage):
                                  for_evaluation=True):
         """See Language.get_compilation_commands."""
         basename = os.path.splitext(os.path.basename(source_filenames[0]))[0]
-        compilation_program = ";".join([
+        compilation_program = ";\n".join([
             "import py_compile as m",
             "m.compile(%s, %s, doraise=True)" % (
                 repr(basename + ".py"), repr(basename))])
