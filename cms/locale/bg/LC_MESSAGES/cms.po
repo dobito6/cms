@@ -97,9 +97,9 @@ msgstr "Вашето решение изпозва твърде много об�
 
 #, python-format
 msgid ""
-"Execution killed with signal %d (could be triggered by violating memory "
+"Execution killed with signal %s (could be triggered by violating memory "
 "limits)"
-msgstr "Изпълнението беше прекратено със сигнал %d (вероятно причинено от нарушаване на ограниченията за памет)"
+msgstr "Изпълнението беше прекратено със сигнал %s (вероятно причинено от нарушаване на ограниченията за памет)"
 
 msgid ""
 "Your submission was killed with the specified signal. Among other things, "
