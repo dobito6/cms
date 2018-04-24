@@ -420,7 +420,7 @@ msgid "Your submission has been received and is currently being evaluated."
 msgstr "Вашето решение беше получено и се оценява в момента."
 
 msgid "Compiling..."
-msgstr "Компилиране..."
+msgstr "Компилация..."
 
 msgid "details"
 msgstr "детайли"
@@ -890,13 +890,13 @@ msgid "Preparing..."
 msgstr "Подготовка..."
 
 msgid "Compilation output"
-msgstr "Изход от компилирането"
+msgstr "Изход от компилацията"
 
 msgid "Compilation outcome:"
-msgstr "Резултат от компилирането:"
+msgstr "Резултат от компилацията:"
 
 msgid "Compilation time:"
-msgstr "Време за компилиране:"
+msgstr "Време за компилация:"
 
 msgid "Memory used:"
 msgstr "Използвана памет:"
@@ -966,7 +966,7 @@ msgid "Some details"
 msgstr "Някои детайли"
 
 msgid "Compilation commands"
-msgstr "Команди за компилиране"
+msgstr "Команди за компилация"
 
 #, python-format
 msgid ""
