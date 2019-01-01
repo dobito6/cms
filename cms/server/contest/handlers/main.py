@@ -110,26 +110,26 @@ class LoginHandler(ContestHandler):
 
         if not validate_password(correct_password, password):
             logger.info("Login error: user=%s pass=%s remote_ip=%s." %
-                        (filtered_user, filtered_pass, self.request.remote_ip))
+                        (filtered_user, filtered_pass, self.request.headers.get("X-Real-IP") or self.request.remote_ip))
             self.redirect(error_page)
             return
 
         if self.contest.ip_restriction and participation.ip is not None \
                 and not check_ip(self.request.remote_ip, participation.ip):
             logger.info("Unexpected IP: user=%s pass=%s remote_ip=%s.",
-                        filtered_user, filtered_pass, self.request.remote_ip)
+                        filtered_user, filtered_pass, self.request.headers.get("X-Real-IP") or self.request.remote_ip)
             self.redirect(error_page)
             return
 
         if participation.hidden and self.contest.block_hidden_participations:
             logger.info("Hidden user login attempt: "
                         "user=%s pass=%s remote_ip=%s.",
-                        filtered_user, filtered_pass, self.request.remote_ip)
+                        filtered_user, filtered_pass, self.request.headers.get("X-Real-IP") or self.request.remote_ip)
             self.redirect(error_page)
             return
 
         logger.info("User logged in: user=%s remote_ip=%s.",
-                    filtered_user, self.request.remote_ip)
+                    filtered_user, self.request.headers.get("X-Real-IP") or self.request.remote_ip)
         self.set_secure_cookie(self.contest.name + "_login",
                                pickle.dumps((user.username,
                                              correct_password,
