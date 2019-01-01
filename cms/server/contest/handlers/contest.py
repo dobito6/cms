@@ -185,7 +185,7 @@ class ContestHandler(BaseHandler):
         # and that is not hidden if hidden users are blocked.
         ip_login_restricted = \
             self.contest.ip_restriction and participation.ip is not None \
-            and not check_ip(self.request.remote_ip, participation.ip)
+            and not check_ip(self.request.headers.get("X-Real-IP") or self.request.remote_ip, participation.ip)
         hidden_user_restricted = \
             participation.hidden and self.contest.block_hidden_participations
         if ip_login_restricted or hidden_user_restricted:
@@ -205,11 +205,12 @@ class ContestHandler(BaseHandler):
             matching the remote IP address.
 
         """
+
         try:
             # We encode it as a network (i.e., we assign it a /32 or
             # /128 mask) since we're comparing it for equality with
             # other networks.
-            remote_ip = ipaddress.ip_network(unicode(self.request.remote_ip))
+            remote_ip = ipaddress.ip_network(unicode(self.request.headers.get("X-Real-IP") or self.request.remote_ip))
         except ValueError:
             return None
         participations = self.sql_session.query(Participation)\
