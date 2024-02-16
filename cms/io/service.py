@@ -107,6 +107,8 @@ class Service(object):
                               "Is it specified in core_services in cms.conf?" %
                               (self._my_coord,))
 
+        address = Address('0.0.0.0', address.port)
+
         self.rpc_server = StreamServer(address, self._connection_handler)
         self.backdoor = None
 
