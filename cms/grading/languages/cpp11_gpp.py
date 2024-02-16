@@ -41,7 +41,7 @@ class Cpp11Gpp(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "C++11 / g++"
+        return "C++ / g++"
 
     @property
     def source_extensions(self):
@@ -65,7 +65,7 @@ class Cpp11Gpp(CompiledLanguage):
         command = ["/usr/bin/g++"]
         if for_evaluation:
             command += ["-DEVAL"]
-        command += ["-std=gnu++11", "-O2", "-pipe", "-static",
+        command += ["-std=gnu++17", "-O2", "-pipe",
                     "-s", "-o", executable_filename]
         command += source_filenames
         return [command]

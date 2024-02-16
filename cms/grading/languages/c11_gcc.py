@@ -41,7 +41,7 @@ class C11Gcc(CompiledLanguage):
     @property
     def name(self):
         """See Language.name."""
-        return "C11 / gcc"
+        return "C / gcc"
 
     @property
     def source_extensions(self):
@@ -65,7 +65,7 @@ class C11Gcc(CompiledLanguage):
         command = ["/usr/bin/gcc"]
         if for_evaluation:
             command += ["-DEVAL"]
-        command += ["-std=gnu11", "-O2", "-pipe", "-static",
+        command += ["-std=c17", "-O2", "-pipe",
                     "-s", "-o", executable_filename]
         command += source_filenames
         command += ["-lm"]
