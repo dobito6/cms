@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
 # Copyright © 2010-2013 Giovanni Mascellani <mascellani@poisson.phc.unipi.it>
-# Copyright © 2010-2015 Stefano Maggiolo <s.maggiolo@gmail.com>
+# Copyright © 2010-2018 Stefano Maggiolo <s.maggiolo@gmail.com>
 # Copyright © 2010-2012 Matteo Boscariol <boscarim@hotmail.com>
 # Copyright © 2012-2014 Luca Wehrstedt <luca.wehrstedt@gmail.com>
 # Copyright © 2014 Artem Iglikov <artem.iglikov@gmail.com>
@@ -28,17 +28,20 @@
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from future.builtins.disabled import *  # noqa
+from future.builtins import *  # noqa
+import six
 
 import csv
 import io
-import sys
 
 from sqlalchemy.orm import joinedload
 
 from cms.db import Contest
-from cms.grading import task_score
+from cms.grading.scoring import task_score
 
 from .base import BaseHandler, require_permission
 
@@ -71,8 +74,7 @@ class RankingHandler(BaseHandler):
             total_score = 0.0
             partial = False
             for task in self.contest.tasks:
-                t_score, t_partial = task_score(p, task)
-                t_score = round(t_score, task.score_precision)
+                t_score, t_partial = task_score(p, task, rounded=True)
                 p.scores.append((t_score, t_partial))
                 total_score += t_score
                 partial = partial or t_partial
@@ -91,7 +93,7 @@ class RankingHandler(BaseHandler):
             self.set_header("Content-Disposition",
                             "attachment; filename=\"ranking.csv\"")
 
-            if sys.version_info >= (3, 0):
+            if six.PY3:
                 output = io.StringIO()  # untested
             else:
                 # In python2 we must use this because its csv module does not
@@ -127,20 +129,20 @@ class RankingHandler(BaseHandler):
                 if show_teams:
                     row.append(p.team.name if p.team else "")
                 assert len(contest.tasks) == len(p.scores)
-                for t_score, t_partial in p.scores: # Custom field, see above
+                for t_score, t_partial in p.scores:  # Custom field, see above
                     row.append(t_score)
                     if include_partial:
                         row.append("*" if t_partial else "")
 
-                total_score, partial = p.total_score # Custom field, see above
+                total_score, partial = p.total_score  # Custom field, see above
                 row.append(total_score)
                 if include_partial:
                     row.append("*" if partial else "")
 
-                if sys.version_info >= (3, 0):
+                if six.PY3:
                     writer.writerow(row)  # untested
                 else:
-                    writer.writerow([unicode(s).encode("utf-8") for s in row])
+                    writer.writerow([s.encode("utf-8") for s in row])
 
             self.finish(output.getvalue())
         else:

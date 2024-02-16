@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
 # Copyright © 2010-2012 Giovanni Mascellani <mascellani@poisson.phc.unipi.it>
-# Copyright © 2010-2017 Stefano Maggiolo <s.maggiolo@gmail.com>
+# Copyright © 2010-2018 Stefano Maggiolo <s.maggiolo@gmail.com>
 # Copyright © 2010-2012 Matteo Boscariol <boscarim@hotmail.com>
 # Copyright © 2014 Artem Iglikov <artem.iglikov@gmail.com>
 # Copyright © 2016 Luca Wehrstedt <luca.wehrstedt@gmail.com>
@@ -23,16 +23,20 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from future.builtins.disabled import *  # noqa
+from future.builtins import *  # noqa
 
 import logging
 import os
 import random
 import re
 import tempfile
-import urlparse
+from future.moves.urllib.parse import parse_qs, urlsplit
 
+from cms import config
 from cms.grading.languagemanager import filename_to_language
 from cmscommon.crypto import decrypt_number
 from cmstestsuite.web import GenericRequest, LoginRequest
@@ -154,13 +158,14 @@ class SubmitRequest(GenericRequest):
         if self.redirected_to is None:
             return None
 
-        query = urlparse.parse_qs(urlparse.urlsplit(self.redirected_to).query)
+        query = parse_qs(urlsplit(self.redirected_to).query)
         if "submission_id" not in query or len(query["submission_id"]) != 1:
             logger.warning("Redirected to an unexpected page: `%s'",
                            self.redirected_to)
             return None
         try:
-            submission_id = decrypt_number(query["submission_id"][0])
+            submission_id = decrypt_number(query["submission_id"][0],
+                                           config.secret_key)
         except Exception:
             logger.warning("Unable to decrypt submission id from page: `%s'",
                            self.redirected_to)
@@ -219,13 +224,14 @@ class SubmitUserTestRequest(GenericRequest):
         if self.redirected_to is None:
             return None
 
-        query = urlparse.parse_qs(urlparse.urlsplit(self.redirected_to).query)
+        query = parse_qs(urlsplit(self.redirected_to).query)
         if "user_test_id" not in query or len(query["user_test_id"]) != 1:
             logger.warning("Redirected to an unexpected page: `%s'",
                            self.redirected_to)
             return None
         try:
-            user_test_id = decrypt_number(query["user_test_id"][0])
+            user_test_id = decrypt_number(query["user_test_id"][0],
+                                          config.secret_key)
         except Exception:
             logger.warning("Unable to decrypt user test id from page: `%s'",
                            self.redirected_to)

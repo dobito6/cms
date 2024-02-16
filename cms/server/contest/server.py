@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
@@ -39,24 +39,31 @@
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from future.builtins.disabled import *  # noqa
+from future.builtins import *  # noqa
 
-import base64
 import logging
-import pkg_resources
 
+from werkzeug.wsgi import SharedDataMiddleware
+
+from cms.server.contest.jinja2_toolbox import CWS_ENVIRONMENT
+from cmscommon.binary import hex_to_bin
 from cms import ConfigError, ServiceCoord, config
 from cms.io import WebService
-from cms.db.filecacher import FileCacher
-from cms.locale import get_translations, wrap_translations_for_tornado
+from cms.locale import get_translations
 
 from .handlers import HANDLERS
-from .handlers.base import BaseHandler
+from .handlers.base import ContestListHandler
 from .handlers.main import MainHandler
 
 
 logger = logging.getLogger(__name__)
+
+
+SECONDS_IN_A_YEAR = 365 * 24 * 60 * 60
 
 
 class ContestWebServer(WebService):
@@ -65,11 +72,9 @@ class ContestWebServer(WebService):
     """
     def __init__(self, shard, contest_id=None):
         parameters = {
-            "template_path": pkg_resources.resource_filename(
-                "cms.server.contest", "templates"),
             "static_files": [("cms.server", "static"),
                              ("cms.server.contest", "static")],
-            "cookie_secret": base64.b64encode(config.secret_key),
+            "cookie_secret": hex_to_bin(config.secret_key),
             "debug": config.tornado_debug,
             "is_proxy_used": config.is_proxy_used,
             "num_proxies_used": config.num_proxies_used,
@@ -89,7 +94,7 @@ class ContestWebServer(WebService):
 
         if self.contest_id is None:
             HANDLERS.append((r"", MainHandler))
-            handlers = [(r'/', BaseHandler)]
+            handlers = [(r'/', ContestListHandler)]
             for h in HANDLERS:
                 handlers.append((r'/([^/]+)' + h[0],) + h[1:])
         else:
@@ -103,6 +108,13 @@ class ContestWebServer(WebService):
             shard=shard,
             listen_address=listen_address)
 
+        self.wsgi_app = SharedDataMiddleware(
+            self.wsgi_app, {"/stl": config.stl_path},
+            cache=True, cache_timeout=SECONDS_IN_A_YEAR,
+            fallback_mimetype="application/octet-stream")
+
+        self.jinja2_environment = CWS_ENVIRONMENT
+
         # This is a dictionary (indexed by username) of pending
         # notification. Things like "Yay, your submission went
         # through.", not things like "Your question has been replied",
@@ -111,10 +123,8 @@ class ContestWebServer(WebService):
         self.notifications = {}
 
         # Retrieve the available translations.
-        self.langs = {lang_code: wrap_translations_for_tornado(trans)
-                      for lang_code, trans in get_translations().iteritems()}
+        self.translations = get_translations()
 
-        self.file_cacher = FileCacher(self)
         self.evaluation_service = self.connect_to(
             ServiceCoord("EvaluationService", 0))
         self.scoring_service = self.connect_to(

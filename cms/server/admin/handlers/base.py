@@ -1,11 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
 # Copyright © 2010-2013 Giovanni Mascellani <mascellani@poisson.phc.unipi.it>
 # Copyright © 2010-2016 Stefano Maggiolo <s.maggiolo@gmail.com>
 # Copyright © 2010-2012 Matteo Boscariol <boscarim@hotmail.com>
-# Copyright © 2012-2016 Luca Wehrstedt <luca.wehrstedt@gmail.com>
+# Copyright © 2012-2018 Luca Wehrstedt <luca.wehrstedt@gmail.com>
 # Copyright © 2014 Artem Iglikov <artem.iglikov@gmail.com>
 # Copyright © 2014 Fabian Gundlach <320pointsguy@gmail.com>
 # Copyright © 2016 Myungwoo Chun <mc.tamaki@gmail.com>
@@ -29,8 +29,11 @@
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from future.builtins.disabled import *  # noqa
+from future.builtins import *  # noqa
 
 import ipaddress
 import json
@@ -45,13 +48,12 @@ import tornado.web
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import subqueryload
 
-from cms import __version__
-from cms.db import Admin, Contest, Participation, Question, \
-    Submission, SubmissionFormatElement, SubmissionResult, Task, Team, User, \
-    UserTest
+from cms import __version__, config
+from cms.db import Admin, Contest, Participation, Question, Submission, \
+    SubmissionResult, Task, Team, User, UserTest
 from cms.grading.scoretypes import get_score_type_class
 from cms.grading.tasktypes import get_task_type_class
-from cms.server import CommonRequestHandler, file_handler_gen
+from cms.server import CommonRequestHandler, FileHandlerMixin
 from cmscommon.datetime import make_datetime
 from cmscommon.crypto import hash_password, parse_authentication
 
@@ -81,11 +83,16 @@ def argument_reader(func, empty=None):
         value = self.get_argument(name, None)
         if value is None:
             return
-        if value == "":
+        if len(value) == 0:
             dest[name] = empty
         else:
             dest[name] = func(value)
     return helper
+
+
+def parse_string_list(value):
+    """Parse a comma-separated list of strings."""
+    return list(x.strip() for x in value.split(",") if x.strip())
 
 
 def parse_int(value):
@@ -215,12 +222,12 @@ class BaseHandler(CommonRequestHandler):
         try:
             self.sql_session.commit()
         except IntegrityError as error:
-            self.application.service.add_notification(
+            self.service.add_notification(
                 make_datetime(),
                 "Operation failed.", "%s" % error)
             return False
         else:
-            self.application.service.add_notification(
+            self.service.add_notification(
                 make_datetime(),
                 "Operation successful.", "")
             return True
@@ -279,6 +286,11 @@ class BaseHandler(CommonRequestHandler):
         super(BaseHandler, self).prepare()
         self.contest = None
 
+    def render(self, template_name, **params):
+        t = self.service.jinja2_environment.get_template(template_name)
+        for chunk in t.generate(**params):
+            self.write(chunk)
+
     def render_params(self):
         """Return the default render params used by almost all handlers.
 
@@ -291,44 +303,27 @@ class BaseHandler(CommonRequestHandler):
         params["timestamp"] = make_datetime()
         params["contest"] = self.contest
         params["url"] = self.url
+        params["xsrf_form_html"] = self.xsrf_form_html()
+        # FIXME These objects provide too broad an access: their usage
+        # should be extracted into with narrower-scoped parameters.
+        params["config"] = config
+        params["handler"] = self
         if self.current_user is not None:
-            params["current_user"] = self.current_user
+            params["admin"] = self.current_user
         if self.contest is not None:
             params["phase"] = self.contest.phase(params["timestamp"])
-            # Keep "== None" in filter arguments. SQLAlchemy does not
-            # understand "is None".
             params["unanswered"] = self.sql_session.query(Question)\
                 .join(Participation)\
                 .filter(Participation.contest_id == self.contest.id)\
-                .filter(Question.reply_timestamp == None)\
-                .filter(Question.ignored == False)\
-                .count()  # noqa
+                .filter(Question.reply_timestamp.is_(None))\
+                .filter(Question.ignored.is_(False))\
+                .count()
         # TODO: not all pages require all these data.
         params["contest_list"] = self.sql_session.query(Contest).all()
         params["task_list"] = self.sql_session.query(Task).all()
         params["user_list"] = self.sql_session.query(User).all()
         params["team_list"] = self.sql_session.query(Team).all()
         return params
-
-    def finish(self, *args, **kwds):
-        """Finish this response, ending the HTTP request.
-
-        We override this method in order to properly close the database.
-
-        TODO - Now that we have greenlet support, this method could be
-        refactored in terms of context manager or something like
-        that. So far I'm leaving it to minimize changes.
-
-        """
-        if self.sql_session:  # Request was stopped early, no session to close.
-            self.sql_session.close()
-        try:
-            tornado.web.RequestHandler.finish(self, *args, **kwds)
-        except IOError:
-            # When the client closes the connection before we reply,
-            # Tornado raises an IOError exception, that would pollute
-            # our log with unnecessarily critical messages
-            logger.debug("Connection closed before our reply.")
 
     def write_error(self, status_code, **kwargs):
         if "exc_info" in kwargs and \
@@ -351,6 +346,8 @@ class BaseHandler(CommonRequestHandler):
         self.render("error.html", status_code=status_code, **self.r_params)
 
     get_string = argument_reader(lambda a: a, empty="")
+
+    get_string_list = argument_reader(parse_string_list, empty=[])
 
     # When a checkbox isn't active it's not sent at all, making it
     # impossible to distinguish between missing and False.
@@ -389,18 +386,13 @@ class BaseHandler(CommonRequestHandler):
         """
         choice = self.get_argument("submission_format_choice", "other")
         if choice == "simple":
-            filename = "%s.%%l" % dest["name"]
-            format_ = [SubmissionFormatElement(filename)]
+            format_ = ["%s.%%l" % dest["name"]]
         elif choice == "other":
-            value = self.get_argument("submission_format", "[]")
-            if value == "":
-                value = "[]"
-            format_ = []
-            try:
-                for filename in json.loads(value):
-                    format_ += [SubmissionFormatElement(filename)]
-            except ValueError:
-                raise ValueError("Submission format not recognized.")
+            value = self.get_argument("submission_format", None)
+            if value is None:
+                format_ = list()
+            else:
+                format_ = list(e.strip() for e in value.split(","))
         else:
             raise ValueError("Submission format not recognized.")
         dest["submission_format"] = format_
@@ -418,7 +410,7 @@ class BaseHandler(CommonRequestHandler):
         value = self.get_argument(field, None)
         if value is None:
             return
-        if value == "":
+        if len(value) == 0:
             dest["time_limit"] = None
         else:
             try:
@@ -442,7 +434,7 @@ class BaseHandler(CommonRequestHandler):
         value = self.get_argument(field, None)
         if value is None:
             return
-        if value == "":
+        if len(value) == 0:
             dest["memory_limit"] = None
         else:
             try:
@@ -474,7 +466,7 @@ class BaseHandler(CommonRequestHandler):
             class_ = get_task_type_class(name)
         except KeyError:
             raise ValueError("Task type not recognized: %s." % name)
-        params = json.dumps(class_.parse_handler(self, params + name + "_"))
+        params = class_.parse_handler(self, params + name + "_")
         dest["task_type"] = name
         dest["task_type_parameters"] = params
 
@@ -502,6 +494,10 @@ class BaseHandler(CommonRequestHandler):
         params = self.get_argument(params, None)
         if params is None:
             raise ValueError("Score type parameters not found.")
+        try:
+            params = json.loads(params)
+        except ValueError:
+            raise ValueError("Score type parameters are invalid JSON.")
         dest["score_type"] = name
         dest["score_type_parameters"] = params
 
@@ -543,7 +539,7 @@ class BaseHandler(CommonRequestHandler):
         method = self.get_argument("method")
 
         # If a password is given, we use that.
-        if password != "":
+        if len(password) > 0:
             dest["password"] = hash_password(password, method)
         # If the password was set and was hashed, and the admin kept
         # the method unchanged and didn't specify anything, they must
@@ -640,7 +636,8 @@ class BaseHandler(CommonRequestHandler):
         return self.url("login")
 
 
-FileHandler = file_handler_gen(BaseHandler)
+class FileHandler(BaseHandler, FileHandlerMixin):
+    pass
 
 
 class FileFromDigestHandler(FileHandler):

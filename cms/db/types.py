@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
 # Copyright © 2013 Stefano Maggiolo <s.maggiolo@gmail.com>
-# Copyright © 2014 Luca Wehrstedt <luca.wehrstedt@gmail.com>
+# Copyright © 2014-2018 Luca Wehrstedt <luca.wehrstedt@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -23,54 +23,23 @@
 """
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-
-import ipaddress
+from future.builtins.disabled import *  # noqa
+from future.builtins import *  # noqa
 
 import psycopg2.extras
 import sqlalchemy
+from sqlalchemy import DDL, event, TypeDecorator, Unicode
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.types import TypeDecorator, Unicode
+
+from . import metadata
 
 
-# Have psycopg2 use the types in ipaddress to represent the CIDR type.
-# A handy function to do that has been added in v2.7, for versions
-# before that we do it ourselves. See:
-# https://github.com/psycopg/psycopg2/commit/643ba70bad0f19a68c06ec95de2691c28e060e48
-
-try:
-    psycopg2.extras.register_ipaddress()
-
-except AttributeError:
-    from psycopg2.extensions import new_type, new_array_type, register_type, \
-        register_adapter, QuotedString
-
-    def cast_interface(s, cur=None):
-        if s is None:
-            return None
-        return ipaddress.ip_interface(unicode(s))
-
-    def cast_ipnetwork(s, cur=None):
-        if s is None:
-            return None
-        return ipaddress.ip_network(unicode(s))
-
-    inet = new_type((869,), b'INET', cast_interface)
-    ainet = new_array_type((1041,), b'INET[]', inet)
-
-    cidr = new_type((650,), b'CIDR', cast_ipnetwork)
-    acidr = new_array_type((651,), b'CIDR[]', cidr)
-
-    for c in [inet, ainet, cidr, acidr]:
-        register_type(c, None)
-
-    def adapt_ipaddress(obj):
-        return QuotedString(str(obj))
-
-    for t in [ipaddress.IPv4Interface, ipaddress.IPv6Interface,
-              ipaddress.IPv4Network, ipaddress.IPv6Network]:
-        register_adapter(t, adapt_ipaddress)
+# Have psycopg2 use the Python types in ipaddress to represent the INET
+# and CIDR data types of PostgreSQL.
+psycopg2.extras.register_ipaddress()
 
 
 # Taken from:
@@ -86,40 +55,196 @@ class CastingArray(ARRAY):
         return sqlalchemy.cast(bindvalue, self)
 
 
-class RepeatedUnicode(TypeDecorator):
-    """Implement (short) lists of unicode strings.
+class Codename(TypeDecorator):
+    """Check that the column uses a limited alphabet.
 
-    All values need to contain some non-whitespace characters and no
-    comma. Leading and trailing whitespace will be stripped.
+    Namely: latin letters (upper and lowercase), arabic digits, the
+    underscore and the dash. It must also be non-empty.
 
     """
+
+    domain_name = "CODENAME"
     impl = Unicode
 
-    def process_bind_param(self, value, unused_dialect):
-        """Encode value in a single unicode.
+    @classmethod
+    def compile(cls, dialect=None):
+        return cls.domain_name
 
-        value ([unicode]): the list to encode.
+    @classmethod
+    def get_create_command(cls):
+        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
+                   "CHECK (VALUE ~ '^[A-Za-z0-9_-]+$')",
+                   context={"domain": cls.domain_name})
 
-        return (unicode): the unicode string encoding value.
+    @classmethod
+    def get_drop_command(cls):
+        return DDL("DROP DOMAIN %(domain)s",
+                   context={"domain": cls.domain_name})
 
-        raise (ValueError): if some string contains "," or is composed
-            only by whitespace.
 
-        """
-        # This limitation may be removed if necessary.
-        if any("," in val for val in value):
-            raise ValueError("Comma cannot be encoded.")
-        if any(len(val) == 0 or val.isspace() for val in value):
-            raise ValueError("Cannot be only whitespace.")
-        return ",".join(val.strip() for val in value)
+event.listen(metadata, "before_create", Codename.get_create_command())
+event.listen(metadata, "after_drop", Codename.get_drop_command())
 
-    def process_result_value(self, value, unused_dialect):
-        """Decode values from a single unicode.
 
-        value (unicode): the unicode string to decode.
+class Filename(TypeDecorator):
+    """Check that the column is a filename using a simple alphabet.
 
-        return ([unicode]): the decoded list.
+    Namely: latin letters (upper and lowercase), arabic digits, the
+    underscore, the dash and the dot (for extensions). However, `.` and
+    `..` are forbidden since they have a special meaning in UNIX. It
+    must also be non-empty.
 
-        """
-        return list(val.strip() for val in value.split(",")
-                    if len(val) > 0 and not val.isspace())
+    """
+
+    domain_name = "FILENAME"
+    impl = Unicode
+
+    @classmethod
+    def compile(cls, dialect=None):
+        return cls.domain_name
+
+    @classmethod
+    def get_create_command(cls):
+        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
+                   "CHECK (VALUE ~ '^[A-Za-z0-9_.-]+$') "
+                   "CHECK (VALUE != '.') "
+                   "CHECK (VALUE != '..')",
+                   context={"domain": cls.domain_name})
+
+    @classmethod
+    def get_drop_command(cls):
+        return DDL("DROP DOMAIN %(domain)s",
+                   context={"domain": cls.domain_name})
+
+
+event.listen(metadata, "before_create", Filename.get_create_command())
+event.listen(metadata, "after_drop", Filename.get_drop_command())
+
+
+class FilenameSchema(TypeDecorator):
+    """Check that the column is a filename schema using a simple alphabet.
+
+    Namely: latin letters (upper and lowercase), arabic digits, the
+    underscore, the dash and the dot (for extensions). It is optionally
+    allowed to end in `.%l` which denotes a language-specific extension
+    placeholder. However, `.` and `..` are forbidden since they have a
+    special meaning in UNIX. It must also be non-empty (excluding the
+    extension placeholder).
+
+    A filename schema is used when specifying the format of submissions
+    in order to give a generic format that abstracts away the actual
+    language that will be used by the contestant.
+
+    """
+
+    domain_name = "FILENAME_SCHEMA"
+    impl = Unicode
+
+    @classmethod
+    def compile(cls, dialect=None):
+        return cls.domain_name
+
+    @classmethod
+    def get_create_command(cls):
+        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
+                   "CHECK (VALUE ~ '^[A-Za-z0-9_.-]+(\.%%l)?$') "
+                   "CHECK (VALUE != '.') "
+                   "CHECK (VALUE != '..')",
+                   context={"domain": cls.domain_name})
+
+    @classmethod
+    def get_drop_command(cls):
+        return DDL("DROP DOMAIN %(domain)s",
+                   context={"domain": cls.domain_name})
+
+
+event.listen(metadata, "before_create", FilenameSchema.get_create_command())
+event.listen(metadata, "after_drop", FilenameSchema.get_drop_command())
+
+
+class FilenameSchemaArray(TypeDecorator):
+    """Check that the column is an array of filename schemas (as above).
+
+    All elements of the array must satisfy the constraints of filename
+    schemas. Their alphabet is restricted to latin letters (upper and
+    lowercase), arabic digits, the underscore, the dash and the dot
+    (for extensions). They are optionally allowed to end in `.%l` which
+    denotes a language-specific extension placeholder. However, `.` and
+    `..` are forbidden since they have a special meaning in UNIX. They
+    must also be non-empty (excluding the extension placeholder).
+
+    """
+
+    domain_name = "FILENAME_SCHEMA_ARRAY"
+    impl = CastingArray(Unicode)
+
+    @classmethod
+    def compile(cls, dialect=None):
+        return cls.domain_name
+
+    @classmethod
+    def get_create_command(cls):
+        # Postgres allows the condition "<sth> <op> ALL (<array>)" that
+        # is true iff for all elements of array "<sth> <op> <element>".
+        # This works for (in)equality but, as the order of the operands
+        # is preserved, it doesn't work for regexp matching, where the
+        # syntax is "<text> ~ <pattern>". Our regexp operates on a per
+        # character basis so we can work around it by concatenating the
+        # items of the array (using array_to_string) and match the
+        # regexp on the result.
+        return DDL("CREATE DOMAIN %(domain)s VARCHAR[] "
+                   "CHECK (array_to_string(VALUE, '') ~ '^[A-Za-z0-9_.%%-]*$') "
+                   "CHECK (array_to_string(VALUE, ',') "
+                   "       ~ '^([A-Za-z0-9_.-]+(\.%%l)?(,|$))*$') "
+                   "CHECK ('.' != ALL(VALUE)) "
+                   "CHECK ('..' != ALL(VALUE))",
+                   context={"domain": cls.domain_name})
+
+    @classmethod
+    def get_drop_command(cls):
+        return DDL("DROP DOMAIN %(domain)s",
+                   context={"domain": cls.domain_name})
+
+
+event.listen(metadata, "before_create",
+             FilenameSchemaArray.get_create_command())
+event.listen(metadata, "after_drop", FilenameSchemaArray.get_drop_command())
+
+
+class Digest(TypeDecorator):
+    """Check that the column is a valid SHA1 hex digest.
+
+    The digest must consist of 40 hexadecimal digits (arabic decimal
+    digits + lowercase latin letters from a to f).
+
+    Alternatively, the value could be a tombstone, which denotes that
+    the file existed but was deleted in order to recover space (this is
+    only done with files that can be regenerated, like executables).
+
+    """
+
+    domain_name = "DIGEST"
+    impl = Unicode
+
+    # The fake digest used to mark a file as deleted in the backend.
+    TOMBSTONE = "x"
+
+    @classmethod
+    def compile(cls, dialect=None):
+        return cls.domain_name
+
+    @classmethod
+    def get_create_command(cls):
+        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
+                   "CHECK (VALUE ~ '^([0-9a-f]{40}|%(tombstone)s)$')",
+                   context={"domain": cls.domain_name,
+                            "tombstone": cls.TOMBSTONE})
+
+    @classmethod
+    def get_drop_command(cls):
+        return DDL("DROP DOMAIN %(domain)s",
+                   context={"domain": cls.domain_name})
+
+
+event.listen(metadata, "before_create", Digest.get_create_command())
+event.listen(metadata, "after_drop", Digest.get_drop_command())
